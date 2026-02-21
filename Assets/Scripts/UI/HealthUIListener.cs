@@ -3,7 +3,6 @@ using UnityEngine.UI;
 
 public class HealthUIListener : MonoBehaviour
 {
-
     [SerializeField] private HealthEventChannel playerHealthChannel;
 
     [SerializeField] private Image healthBar;
@@ -26,7 +25,8 @@ public class HealthUIListener : MonoBehaviour
 
     private void OnHealthReset(Health health)
     {
-
+        _playerHealth = health;
+        Refresh();
     }
 
     private void OnHealthChanged(Health health, float delta, DamageRequest request)
@@ -46,6 +46,6 @@ public class HealthUIListener : MonoBehaviour
 
     private void OnHealthDestroyed(Health health, DamageRequest request)
     {
-        //Destroy(gameObject);
+        Destroy(gameObject);
     }
 }

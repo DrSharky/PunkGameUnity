@@ -1,20 +1,26 @@
 using System;
 using UnityEngine;
+using UnityEngine.UIElements;
 
 public class Health : MonoBehaviour, IDamageable
 {
-
-    [SerializeField] private int maxHealth = 100;
+    [SerializeField] private float maxHealth = 100;
     [SerializeField] private bool destroyOnDeath = false;
-
-    public float MaxHealth => maxHealth;
-
-    [SerializeField]
-    public float CurrentHealth;
+    [SerializeField] private float currentHealth;
+    [SerializeField] private HealthEventChannel healthEvents;
 
     private bool isDead = false;
 
-    [SerializeField] private HealthEventChannel healthEvents;
+    public float MaxHealth
+    {
+        get => maxHealth;
+        private set => maxHealth = value;
+    }
+    public float CurrentHealth
+    {
+        get => currentHealth;
+        private set => currentHealth = value;
+    }
 
     private void Awake()
     {
@@ -28,6 +34,7 @@ public class Health : MonoBehaviour, IDamageable
         {
             return new DamageResponse(0f, false);
         }
+
         float oldHealth = CurrentHealth;
         CurrentHealth = Mathf.Clamp(CurrentHealth - request.Amount, 0f, maxHealth);
         float delta = CurrentHealth - oldHealth;
@@ -37,10 +44,10 @@ public class Health : MonoBehaviour, IDamageable
         if (CurrentHealth <= 0f && !isDead)
         {
             isDead = true;
-            healthEvents?.RaiseDestroyed(this, request);
 
             if (destroyOnDeath)
             {
+                healthEvents?.RaiseDestroyed(this, request);
                 Destroy(gameObject);
             }
 
@@ -65,10 +72,21 @@ public class Health : MonoBehaviour, IDamageable
         healthEvents?.RaiseChanged(this, delta, healRequest);
     }
 
-    public void Reset()
+    private void Reset()
     {
         isDead = false;
         CurrentHealth = maxHealth;
         healthEvents?.RaiseReset(this);
     }
+
+#if DEVTOOLS
+    private void Update()
+    {
+        // DEBUG LINE. Remove this in production.
+        if (Input.GetKeyDown(KeyCode.K))
+        {
+            Reset();
+        }
+    }
+#endif
 }

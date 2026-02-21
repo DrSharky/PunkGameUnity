@@ -1,10 +1,13 @@
 using UnityEngine;
 
 [RequireComponent(typeof(Rigidbody))]
-public abstract class Pickupable : MonoBehaviour, IInteractable
+public class Pickupable : MonoBehaviour, IInteractable
 {
-
     [SerializeField] private bool canPickup = true;
+    /// <summary>
+    /// Represents the transform used as the handle for pickup interactions.
+    /// </summary>
+    [SerializeField] private Transform pickupHandle;
 
     private Rigidbody _rb;
     private Collider[] _colliders;
@@ -27,7 +30,7 @@ public abstract class Pickupable : MonoBehaviour, IInteractable
         OnPickup(interactor.transform);
     }
 
-    public virtual void OnPickup(Transform pickupRoot)
+    public void OnPickup(Transform pickupRoot)
     {
         if (canPickup)
         {
@@ -37,6 +40,7 @@ public abstract class Pickupable : MonoBehaviour, IInteractable
 
             transform.SetParent(pickupRoot, false);
             transform.localPosition = Vector3.zero;
+            transform.localPosition = pickupHandle.localPosition; // Offset the pickup to the handle position
             transform.localRotation = Quaternion.identity;
 
             foreach (var col in _colliders)
@@ -46,7 +50,7 @@ public abstract class Pickupable : MonoBehaviour, IInteractable
         }
     }
 
-    public virtual void OnThrow(Vector3 throwDirection, float throwSpeed)
+    public void OnThrow(Vector3 throwDirection, float throwSpeed)
     {
         transform.SetParent(_originalParent, true);
         _rb.isKinematic = false;
@@ -58,7 +62,7 @@ public abstract class Pickupable : MonoBehaviour, IInteractable
         }
     }
 
-    public virtual void OnDrop()
+    public void OnDrop()
     {
         transform.SetParent(_originalParent, true);
         _rb.isKinematic = false;
@@ -67,5 +71,4 @@ public abstract class Pickupable : MonoBehaviour, IInteractable
             col.excludeLayers = 0; // Re-enable collisions with all layers
         }
     }
-
 }

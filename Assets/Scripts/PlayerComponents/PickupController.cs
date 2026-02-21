@@ -5,9 +5,11 @@ public class PickupController : MonoBehaviour
     [SerializeField] private Camera cam;
     [SerializeField] private Transform pickupRoot;
     [SerializeField] private LayerMask pickupMask;
-    [SerializeField] private float interactDistance = 3f;
+    [SerializeField] private float interactDistance = 1.75f;
     [SerializeField] private float aimRadius = 0.15f;
     [SerializeField] private float throwSpeed = 12f;
+    [SerializeField] private Transform pickupOrigin; // defaulting this to chest.
+    [SerializeField] private PickupEventChannel pickupEvents;
 
     private Pickupable _held;
 
@@ -23,10 +25,13 @@ public class PickupController : MonoBehaviour
     {
         if (Input.GetKeyDown(KeyCode.E))
         {
-            if (_held != null) Drop();
+            if (_held != null)
+            {
+                Drop();
+            }
             else
             {
-                 TryPickup();
+                TryPickup();
             }
         }
 
@@ -36,17 +41,27 @@ public class PickupController : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Raycast from the 3rd person player using the pickupOrigin as the origin point,
+    /// using the camera as the direction of the ray,
+    /// and check if it hits a pickupable object within the interact distance and aim radius.
+    /// </summary>
     private void TryPickup()
     {
-        var ray = cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
+        var rayOrigin = pickupOrigin.position;
+        var rayDirection = cam.transform.forward;
 
-        if (Physics.SphereCast(ray, aimRadius, out var hit, interactDistance, pickupMask, QueryTriggerInteraction.Ignore))
+        //Debug line to show the raycast in the editor.
+        Debug.DrawRay(rayOrigin, rayDirection * interactDistance, Color.red, 5f);
+
+        if (Physics.SphereCast(rayOrigin, aimRadius, rayDirection, out var hit, interactDistance, pickupMask))
         {
-            var pickup = hit.collider.GetComponentInParent<Pickupable>();
-            if (pickup != null && pickup.CanInteract(gameObject))
+            var pickupable = hit.collider.GetComponent<Pickupable>();
+            if (pickupable != null)
             {
-                pickup.Interact(gameObject);
-                _held = pickup;
+                _held = pickupable;
+                _held.OnPickup(pickupRoot);
+                pickupEvents?.RaisePickup(pickupable);
             }
         }
     }
@@ -55,6 +70,7 @@ public class PickupController : MonoBehaviour
     {
         if (_held != null)
         {
+            pickupEvents?.RaiseDrop(_held);
             _held.OnDrop();
             _held = null;
         }
@@ -63,6 +79,7 @@ public class PickupController : MonoBehaviour
     private void Throw()
     {
         var throwDirection = cam.transform.forward;
+        pickupEvents?.RaiseThrow(_held);
         _held.OnThrow(throwDirection, throwSpeed);
         _held = null;
     }
