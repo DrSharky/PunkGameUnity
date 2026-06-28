@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 [RequireComponent(typeof(Rigidbody))]
@@ -59,6 +60,38 @@ public class Pickupable : MonoBehaviour, IInteractable
         foreach (var col in _colliders)
         {
             col.excludeLayers = 0; // Re-enable collisions with all layers
+        }
+    }
+
+    [Header("Impact Damage")]
+    [Tooltip("Damage dealt per unit of relative velocity on impact with an enemy.")]
+    [SerializeField] private float damagePerSpeed = 5f;
+
+    [Tooltip("Minimum relative velocity required to deal any damage.")]
+    [SerializeField] private float minImpactSpeed = 2f;
+
+    private void OnCollisionEnter(Collision collision)
+    {
+        if (collision.gameObject.layer == 7) // Enemy layer
+        {
+            float impactSpeed = collision.relativeVelocity.magnitude;
+
+            if (impactSpeed < minImpactSpeed) return;
+
+            IDamageable damageable = collision.gameObject.GetComponentInParent<IDamageable>();
+            if (damageable == null) return;
+
+            float damage = impactSpeed * damagePerSpeed;
+
+            ContactPoint contact = collision.GetContact(0);
+
+            damageable.ApplyDamage(new DamageRequest(
+                damage,
+                gameObject,
+                contact.point,
+                contact.normal,
+                DamageType.Physical
+            ));
         }
     }
 

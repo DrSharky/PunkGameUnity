@@ -4,19 +4,34 @@ using UnityEngine.AI;
 
 public class BaseEnemy : MonoBehaviour, IEnemy
 {
+    [Header("Combat")]
     [SerializeField] private Transform attackOrigin;
     [SerializeField] private float attackDistance = 1.3f;
     [SerializeField] private float attackRate = 1f;
     [SerializeField] private float damageAmount = 10f;
-    [SerializeField] private float detectionRange = 10f;
     [SerializeField] private DamageType damageType;
+
+    [Header("Detection / Movement")]
+    [SerializeField] private float detectionRange = 10f;
+    [SerializeField] private float rotationSpeed = 8f;
+    [SerializeField] private float destinationUpdateInterval = 0.2f;
+
+    [Header("Jumping")]
+    [SerializeField] private float jumpDuration = 0.6f;
+    [SerializeField] private float jumpHeight = 1.5f;
+    [SerializeField] private bool useManualOffMeshJump = true;
 
     private NavMeshAgent navMeshAgent;
     private GameObject player;
     private bool isAttacking = false;
+    private bool isJumping = false;
+    private float destinationUpdateTimer = 0f;
 
     private enum EnemyState { Idle, Chase, Attack }
     private EnemyState currentState = EnemyState.Idle;
+
+    public int Health { get { return health; } }
+    private int health { get; set; }
 
     #region IEnemy
 
@@ -43,16 +58,16 @@ public class BaseEnemy : MonoBehaviour, IEnemy
         }
     }
 
-    // Resumes NavMeshAgent movement toward last set destination
     public void Move()
     {
+        if (isJumping) return;
         navMeshAgent.isStopped = false;
     }
 
-    // Sets the NavMeshAgent destination to the target's position
     public void MoveTo(GameObject target)
     {
-        if (target == null) return;
+        if (target == null || isJumping) return;
+
         navMeshAgent.isStopped = false;
         navMeshAgent.SetDestination(target.transform.position);
     }
@@ -61,14 +76,29 @@ public class BaseEnemy : MonoBehaviour, IEnemy
 
     #region MB
 
-    void Start()
+    private void Start()
     {
         navMeshAgent = GetComponent<NavMeshAgent>();
         player = GameObject.FindWithTag("Player");
+
+        if (useManualOffMeshJump)
+        {
+            navMeshAgent.autoTraverseOffMeshLink = false;
+        }
     }
 
-    void Update()
+    private void Update()
     {
+        if (navMeshAgent == null || player == null) return;
+
+        if (useManualOffMeshJump && !isJumping && navMeshAgent.isOnOffMeshLink)
+        {
+            StartCoroutine(JumpAcrossOffMeshLink());
+            return;
+        }
+
+        if (isJumping) return;
+
         UpdateState();
         HandleState();
     }
@@ -79,8 +109,6 @@ public class BaseEnemy : MonoBehaviour, IEnemy
 
     private void UpdateState()
     {
-        if (player == null) return;
-
         float distanceToPlayer = Vector3.Distance(transform.position, player.transform.position);
 
         if (distanceToPlayer <= attackDistance)
@@ -100,17 +128,38 @@ public class BaseEnemy : MonoBehaviour, IEnemy
                 break;
 
             case EnemyState.Chase:
-                MoveTo(player);
+                destinationUpdateTimer += Time.deltaTime;
+                if (destinationUpdateTimer >= destinationUpdateInterval)
+                {
+                    MoveTo(player);
+                    destinationUpdateTimer = 0f;
+                }
+
+                SmoothLookAt(player.transform.position);
                 break;
 
             case EnemyState.Attack:
                 navMeshAgent.isStopped = true;
-                // Face the player before attacking
-                transform.LookAt(player.transform.position);
+                SmoothLookAt(player.transform.position);
+
                 if (!isAttacking)
                     StartCoroutine(AttackRoutine());
                 break;
         }
+    }
+
+    private void SmoothLookAt(Vector3 targetPosition)
+    {
+        Vector3 direction = (targetPosition - transform.position).normalized;
+        direction.y = 0f;
+
+        if (direction == Vector3.zero) return;
+
+        Quaternion targetRotation = Quaternion.LookRotation(direction);
+        transform.rotation = Quaternion.Slerp(
+            transform.rotation,
+            targetRotation,
+            rotationSpeed * Time.deltaTime);
     }
 
     private IEnumerator AttackRoutine()
@@ -119,6 +168,49 @@ public class BaseEnemy : MonoBehaviour, IEnemy
         Attack(player, damageType);
         yield return new WaitForSeconds(1f / attackRate);
         isAttacking = false;
+    }
+
+    #endregion
+
+    #region Jumping
+
+    private IEnumerator JumpAcrossOffMeshLink()
+    {
+        isJumping = true;
+        navMeshAgent.isStopped = true;
+
+        OffMeshLinkData linkData = navMeshAgent.currentOffMeshLinkData;
+
+        Vector3 startPos = transform.position;
+        Vector3 endPos = linkData.endPos + Vector3.up * navMeshAgent.baseOffset;
+
+        Vector3 flatDirection = endPos - startPos;
+        flatDirection.y = 0f;
+        if (flatDirection != Vector3.zero)
+        {
+            transform.rotation = Quaternion.LookRotation(flatDirection.normalized);
+        }
+
+        float elapsed = 0f;
+
+        while (elapsed < jumpDuration)
+        {
+            float t = elapsed / jumpDuration;
+
+            Vector3 horizontal = Vector3.Lerp(startPos, endPos, t);
+            float arc = 4f * jumpHeight * t * (1f - t); // parabola
+            Vector3 nextPos = horizontal + Vector3.up * arc;
+
+            navMeshAgent.Warp(nextPos);
+
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        navMeshAgent.Warp(endPos);
+        navMeshAgent.CompleteOffMeshLink();
+        navMeshAgent.isStopped = false;
+        isJumping = false;
     }
 
     #endregion
